@@ -51,7 +51,7 @@ body{
   position:fixed; left:0; right:0; top:0;
   padding-top:max(14px, env(safe-area-inset-top, 0px));
   padding-bottom:10px;
-  display:flex; justify-content:space-between; align-items:flex-start;
+  display:grid; grid-template-columns:1fr auto 1fr; align-items:flex-start;
   gap:12px;
   pointer-events:none;
   font-family:var(--font-mono);
@@ -66,6 +66,9 @@ body{
   padding:10px 14px;
   box-shadow:0 8px 24px #00000055;
 }
+#timer-chip{justify-self:start}
+#score-chip{justify-self:center; text-align:center; min-width:96px}
+#skills-collected{justify-self:end}
 #timer{
   font-size:28px; font-weight:700;
   font-variant-numeric:tabular-nums;
@@ -75,9 +78,20 @@ body{
 }
 #timer.low{color:var(--danger); animation:pulse 0.6s infinite}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+#score{
+  font-size:22px; font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+#combo{
+  font-size:12px; font-weight:700; color:var(--accent-2);
+  margin-top:2px;
+}
+#combo[hidden]{display:none}
+#combo.pop{animation:comboPop 0.22s ease}
+@keyframes comboPop{0%{transform:scale(1.5); opacity:0.5}100%{transform:scale(1); opacity:1}}
 #skills-collected{
   display:flex; flex-direction:column; gap:6px; align-items:flex-end;
-  max-width:46vw;
+  max-width:40vw;
 }
 #skills-collected .label{color:var(--muted); font-size:11px; letter-spacing:0.08em; text-transform:uppercase}
 #skills-list{display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end}
@@ -197,7 +211,11 @@ button.ghost{
 <canvas id="game"></canvas>
 
 <div id="hud" hidden>
-  <div class="hud-chip safe-x"><div id="timer">15</div></div>
+  <div class="hud-chip safe-x" id="timer-chip"><div id="timer">15</div></div>
+  <div class="hud-chip safe-x" id="score-chip">
+    <div id="score">0</div>
+    <div id="combo" hidden>Combo ×1</div>
+  </div>
   <div class="hud-chip safe-x" id="skills-collected">
     <span class="label">Skills Landed</span>
     <div id="skills-list"></div>
@@ -288,6 +306,8 @@ var endScreen = document.getElementById('endScreen');
 var hud = document.getElementById('hud');
 var throwBtn = document.getElementById('throwBtn');
 var timerEl = document.getElementById('timer');
+var scoreEl = document.getElementById('score');
+var comboEl = document.getElementById('combo');
 var skillsListEl = document.getElementById('skills-list');
 
 var player = {x:0, y:0, aim:-Math.PI/2};
@@ -297,12 +317,78 @@ var particles = [];
 var stars = [];
 var hitSkills = new Set();
 var hitCount = 0;
+var score = 0;
+var combo = 0;
+var maxCombo = 0;
 var phase = 'start'; // start | playing | end
 var timeLeft = ROUND_SECONDS;
 var spawnTimer = 0;
 var nextSpawnIn = 0.4;
+var lastTickSecond = -1;
 var lastT = 0;
 var throwCooldown = 0;
+
+// --- sound (tiny synthesized sfx via Web Audio, unlocked on the Start/Restart click) ---
+var audioCtx = null;
+function ensureAudio(){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+  }catch(e){ audioCtx = null; }
+}
+function playThrow(){
+  if(!audioCtx) return;
+  var t = audioCtx.currentTime;
+  var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(560, t);
+  o.frequency.exponentialRampToValueAtTime(220, t+0.09);
+  g.gain.setValueAtTime(0.05, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+0.1);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t+0.1);
+}
+function playHit(){
+  if(!audioCtx) return;
+  var t = audioCtx.currentTime;
+  var n = audioCtx.sampleRate * 0.15;
+  var buf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
+  var d = buf.getChannelData(0);
+  for(var i=0;i<n;i++) d[i] = (Math.random()*2-1) * (1 - i/n);
+  var src = audioCtx.createBufferSource(); src.buffer = buf;
+  var f = audioCtx.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(1800, t);
+  f.frequency.exponentialRampToValueAtTime(200, t+0.15);
+  var g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.2, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+0.15);
+  src.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  src.start(t); src.stop(t+0.15);
+}
+function playTick(strong){
+  if(!audioCtx) return;
+  var t = audioCtx.currentTime;
+  var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(strong ? 920 : 680, t);
+  g.gain.setValueAtTime(0.09, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+0.08);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t+0.08);
+}
+
+// --- difficulty ramp: round starts gentle, gets denser and faster near the end ---
+function lerp(a,b,t){ return a + (b-a)*t; }
+function difficultyAt(elapsed){
+  var t = Math.min(1, Math.max(0, elapsed / ROUND_SECONDS));
+  return {
+    spawnMin: lerp(0.65, 0.22, t),
+    spawnMax: lerp(1.05, 0.48, t),
+    speedMin: lerp(75, 140, t),
+    speedMax: lerp(140, 230, t),
+    maxUfos: Math.round(lerp(5, 11, t))
+  };
+}
 
 function rand(a,b){ return a + Math.random()*(b-a); }
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -333,10 +419,10 @@ canvas.addEventListener('mousemove', onPointerMove);
 canvas.addEventListener('touchmove', function(e){ onPointerMove(e); e.preventDefault(); }, {passive:false});
 canvas.addEventListener('touchstart', function(e){ onPointerMove(e); }, {passive:true});
 
-function spawnUfo(){
+function spawnUfo(speedMin, speedMax){
   var fromRight = Math.random() < 0.5;
   var dir = fromRight ? -1 : 1;
-  var speed = rand(85,165);
+  var speed = rand(speedMin, speedMax);
   ufos.push({
     x: fromRight ? W + 70 : -70,
     y: rand(H*0.14, H*0.52),
@@ -364,6 +450,7 @@ function throwKeyboard(){
     angle: a,
     r: 13
   });
+  playThrow();
 }
 
 window.addEventListener('keydown', function(e){
@@ -391,11 +478,16 @@ function resetGame(){
   ufos = []; bullets = []; particles = [];
   hitSkills = new Set();
   hitCount = 0;
+  score = 0;
+  combo = 0;
+  maxCombo = 0;
   timeLeft = ROUND_SECONDS;
   spawnTimer = 0;
   nextSpawnIn = 0.3;
+  lastTickSecond = -1;
   throwCooldown = 0;
   renderSkillChips();
+  updateScoreUI(false);
   timerEl.textContent = ROUND_SECONDS;
   timerEl.classList.remove('low');
 }
@@ -410,7 +502,38 @@ function renderSkillChips(){
   });
 }
 
+function updateScoreUI(pop){
+  scoreEl.textContent = score;
+  if(combo >= 2){
+    comboEl.hidden = false;
+    comboEl.textContent = 'Combo ×' + combo;
+    if(pop){
+      comboEl.classList.remove('pop');
+      void comboEl.offsetWidth;
+      comboEl.classList.add('pop');
+    }
+  } else {
+    comboEl.hidden = true;
+  }
+}
+
+function registerHit(){
+  combo++;
+  if(combo > maxCombo) maxCombo = combo;
+  var multiplier = 1 + Math.floor((combo-1)/3)*0.5;
+  score += Math.round(10 * multiplier);
+  updateScoreUI(true);
+}
+
+function breakCombo(){
+  if(combo > 0){
+    combo = 0;
+    updateScoreUI(false);
+  }
+}
+
 function startGame(){
+  ensureAudio();
   resetGame();
   phase = 'playing';
   startScreen.hidden = true;
@@ -432,7 +555,8 @@ function endGame(){
   }
 
   document.getElementById('end-stat').textContent =
-    'You shot down ' + hitCount + ' UFO' + (hitCount===1?'':'s') + ' and landed ' + hitSkills.size + ' skill' + (hitSkills.size===1?'':'s') + '.';
+    'You shot down ' + hitCount + ' UFO' + (hitCount===1?'':'s') + ', landed ' + hitSkills.size + ' skill' + (hitSkills.size===1?'':'s') +
+    ' · Score ' + score + ' · Best combo ×' + maxCombo;
 
   var allskills = document.getElementById('allskills');
   allskills.innerHTML = '';
@@ -489,15 +613,21 @@ function update(dt){
       timerEl.textContent = '0';
       endGame();
     } else {
-      timerEl.textContent = Math.ceil(timeLeft);
+      var displaySec = Math.ceil(timeLeft);
+      timerEl.textContent = displaySec;
       timerEl.classList.toggle('low', timeLeft <= 5);
+      if(displaySec !== lastTickSecond){
+        lastTickSecond = displaySec;
+        if(displaySec > 0 && displaySec <= 5) playTick(displaySec === 1);
+      }
     }
 
+    var diff = difficultyAt(ROUND_SECONDS - timeLeft);
     spawnTimer += dt;
-    if(spawnTimer >= nextSpawnIn && ufos.length < 11){
+    if(spawnTimer >= nextSpawnIn && ufos.length < diff.maxUfos){
       spawnTimer = 0;
-      nextSpawnIn = rand(0.3, 0.7);
-      spawnUfo();
+      nextSpawnIn = rand(diff.spawnMin, diff.spawnMax);
+      spawnUfo(diff.speedMin, diff.speedMax);
     }
 
     for(var i = ufos.length-1; i>=0; i--){
@@ -512,7 +642,9 @@ function update(dt){
     var b = bullets[j];
     b.x += b.vx*dt; b.y += b.vy*dt;
     if(b.x < -40 || b.x > W+40 || b.y < -40 || b.y > H+40){
-      bullets.splice(j,1); continue;
+      bullets.splice(j,1);
+      if(phase === 'playing') breakCombo();
+      continue;
     }
     for(var k = ufos.length-1; k>=0; k--){
       var uu = ufos[k];
@@ -520,7 +652,9 @@ function update(dt){
       if(dx*dx+dy*dy < (uu.r+b.r)*(uu.r+b.r)){
         hitSkills.add(uu.skill);
         hitCount++;
+        registerHit();
         burst(uu.x, uu.y, '#ff6ad5');
+        playHit();
         renderSkillChips();
         ufos.splice(k,1);
         bullets.splice(j,1);
