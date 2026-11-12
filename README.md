@@ -1,19 +1,19 @@
 # Offer Hunting
 
-A 15-second arcade game: UFOs fly in carrying SDE skills (Python, AWS, System Design, ...). Aim with your mouse/trackpad, press **Space** to throw a keyboard, and shoot down UFOs to collect skills. Land the right combo before time's up and you get the offer.
+A 15-second arcade game: UFOs fly in from both sides carrying SDE skills (Python, AWS, System Design, ...). Aim with your mouse/trackpad, press **Space** to throw a keyboard, and shoot down UFOs to collect skills. Land the right combo before time's up and you get the offer.
 
-## Play
+**Play it here: [abram0102.github.io/SDE_Skills_Hunting_Game](https://abram0102.github.io/SDE_Skills_Hunting_Game/)**
 
-Open `index.html` in a browser (or enable GitHub Pages for this repo and open the published URL).
+## Controls
 
 - **Mouse / Trackpad** — aim your throw
 - **Space** — throw the keyboard
 - **15 seconds** — one round
 
-Collect the skills each company wants to win their offer:
+## Tech
 
-| Company | Skills needed |
-| --- | --- |
-| Google | Algorithms, System Design |
-| Meta | React, A/B Testing |
-| Amazon | AWS, Microservices |
+Single-file, no build step, no dependencies:
+
+- HTML5 `<canvas>` with vanilla JavaScript for the game loop, rendering, and collision detection
+- CSS custom properties for theming, with layered start/HUD/end-screen overlays on top of the canvas
+- Deployed as a static page via GitHub Pages
