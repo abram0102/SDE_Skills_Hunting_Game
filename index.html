@@ -1,0 +1,721 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Offer Hunting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/*
+  Layout concept: a full-bleed canvas "sky" the player aims into with the
+  mouse/trackpad and fires into with Space; HUD and start/end screens float
+  over it as translucent terminal-glass panels.
+*/
+:root{
+  --bg:#06070f;
+  --panel:#0d1026cc;
+  --fg:#eef1ff;
+  --muted:#8b90b8;
+  --accent:#5eead4;      /* terminal cyan - code / tech */
+  --accent-2:#ff6ad5;    /* ufo magenta */
+  --offer-gold:#ffd166;  /* celebratory offer color */
+  --danger:#ff5c7a;
+  --font-display:'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-body:'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--fg);
+  font-family:var(--font-body);
+  overflow:hidden;
+  overscroll-behavior:none;
+  touch-action:none;
+}
+
+#game{
+  position:fixed; inset:0;
+  width:100%; height:100%;
+  display:block;
+  cursor:crosshair;
+}
+
+.safe-x{
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+
+#hud{
+  position:fixed; left:0; right:0; top:0;
+  padding-top:max(14px, env(safe-area-inset-top, 0px));
+  padding-bottom:10px;
+  display:flex; justify-content:space-between; align-items:flex-start;
+  gap:12px;
+  pointer-events:none;
+  font-family:var(--font-mono);
+  z-index:5;
+}
+#hud[hidden]{display:none!important}
+.hud-chip{
+  background:var(--panel);
+  border:1px solid #ffffff1a;
+  backdrop-filter:blur(8px);
+  border-radius:14px;
+  padding:10px 14px;
+  box-shadow:0 8px 24px #00000055;
+}
+#timer{
+  font-size:28px; font-weight:700;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.02em;
+  text-align:center;
+  min-width:84px;
+}
+#timer.low{color:var(--danger); animation:pulse 0.6s infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+#skills-collected{
+  display:flex; flex-direction:column; gap:6px; align-items:flex-end;
+  max-width:46vw;
+}
+#skills-collected .label{color:var(--muted); font-size:11px; letter-spacing:0.08em; text-transform:uppercase}
+#skills-list{display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end}
+.tag{
+  font-size:12px; padding:3px 9px; border-radius:999px;
+  background:#5eead41f; border:1px solid #5eead455; color:var(--accent);
+  white-space:nowrap;
+}
+
+.overlay{
+  position:fixed; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  padding-block:max(24px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-bottom, 0px));
+  background:radial-gradient(ellipse at 50% 20%, #15193a 0%, #06070f 70%);
+  z-index:10;
+  overflow:auto;
+}
+.overlay[hidden]{display:none!important}
+.card{
+  width:min(560px, 100%);
+  background:var(--panel);
+  border:1px solid #ffffff17;
+  border-radius:24px;
+  padding:36px;
+  text-align:center;
+  box-shadow:0 30px 80px #00000066;
+}
+.eyebrow{
+  font-family:var(--font-mono);
+  color:var(--accent);
+  font-size:13px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  margin:0 0 10px;
+}
+h1{
+  font-family:var(--font-display);
+  font-size:clamp(40px,9vw,64px);
+  margin:0 0 6px;
+  line-height:1.05;
+  text-wrap:balance;
+  background:linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.sub{color:var(--muted); font-size:15px; line-height:1.6; margin:0 0 26px}
+.howto{
+  text-align:left;
+  display:flex; flex-direction:column; gap:10px;
+  margin:0 0 28px;
+  font-size:14px;
+  color:#d6d9f5;
+}
+.howto div{display:flex; gap:10px; align-items:flex-start}
+kbd{
+  font-family:var(--font-mono);
+  background:#1a1f45; border:1px solid #ffffff22; border-bottom-width:2px;
+  border-radius:6px; padding:2px 8px; font-size:12px; color:var(--fg);
+  flex:none;
+}
+button.primary{
+  font-family:var(--font-display);
+  font-size:18px; font-weight:700;
+  color:#06070f;
+  background:linear-gradient(90deg, var(--accent), #8ef0e0);
+  border:none; border-radius:14px;
+  padding:14px 30px;
+  cursor:pointer;
+  box-shadow:0 10px 30px #5eead455;
+}
+button.primary:active{transform:translateY(1px)}
+button.ghost{
+  font-family:var(--font-body); font-size:13px; color:var(--muted);
+  background:transparent; border:none; cursor:pointer; margin-top:14px;
+  text-decoration:underline;
+}
+
+#results{display:flex; flex-direction:column; gap:10px; margin:22px 0}
+.offer-card{
+  display:flex; align-items:center; gap:12px;
+  background:linear-gradient(90deg, #ffd16622, #ffd16608);
+  border:1px solid #ffd16655;
+  border-radius:14px;
+  padding:12px 16px;
+  text-align:left;
+}
+.offer-card .mark{font-size:22px}
+.offer-card .txt{font-family:var(--font-display); font-weight:700; font-size:16px}
+.offer-card .txt b{color:var(--offer-gold)}
+.no-offer{
+  color:var(--muted); font-size:14px; background:#ffffff08;
+  border:1px dashed #ffffff22; border-radius:14px; padding:16px;
+}
+#allskills{
+  display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin:0 0 6px;
+}
+.statline{color:var(--muted); font-size:13px; margin:0 0 4px}
+
+#throwBtn{
+  position:fixed;
+  right:max(18px, calc(env(safe-area-inset-right, 0px) + 18px));
+  bottom:max(18px, calc(env(safe-area-inset-bottom, 0px) + 18px));
+  width:64px; height:64px; border-radius:50%;
+  background:var(--panel); border:1px solid #ffffff22;
+  color:var(--accent); font-size:24px;
+  display:flex; align-items:center; justify-content:center;
+  z-index:6; cursor:pointer;
+  box-shadow:0 10px 24px #00000055;
+}
+#throwBtn[hidden]{display:none!important}
+
+@media (max-width:480px){
+  .card{padding:26px 20px; border-radius:18px}
+  #skills-collected{max-width:60vw}
+}
+</style>
+
+<canvas id="game"></canvas>
+
+<div id="hud" hidden>
+  <div class="hud-chip safe-x"><div id="timer">15</div></div>
+  <div class="hud-chip safe-x" id="skills-collected">
+    <span class="label">Skills Landed</span>
+    <div id="skills-list"></div>
+  </div>
+</div>
+
+<button id="throwBtn" hidden title="Throw keyboard" aria-label="Throw keyboard">⌨️</button>
+
+<div id="startScreen" class="overlay">
+  <div class="card safe-x">
+    <p class="eyebrow">SDE Interview Survival Game</p>
+    <h1>Offer Hunting</h1>
+    <p class="sub">UFOs are flying in, each one carrying a skill big tech wants. You've got 15 seconds — aim, throw your keyboard, and shoot down as many as you can. Land the right combo and an offer is yours.</p>
+    <div class="howto">
+      <div><kbd>Mouse / Trackpad</kbd><span>Move to aim your throw</span></div>
+      <div><kbd>Space</kbd><span>Throw the keyboard, shoot down the UFO ahead</span></div>
+      <div><kbd>15s</kbd><span>That's the whole round — move fast</span></div>
+    </div>
+    <button class="primary" id="startBtn">Start Hunting</button>
+  </div>
+</div>
+
+<div id="endScreen" class="overlay" hidden>
+  <div class="card safe-x">
+    <p class="eyebrow" id="end-eyebrow">Time's Up</p>
+    <h1 id="end-title">Results</h1>
+    <p class="statline" id="end-stat"></p>
+    <div id="allskills"></div>
+    <div id="results"></div>
+    <button class="primary" id="restartBtn">Hunt Again</button>
+    <div><button class="ghost" id="menuBtn">Back to Menu</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+var SKILLS = ["Python","Java","C++","Go","TypeScript","JavaScript","React","Vue","Node.js",
+  "SQL","MySQL","MongoDB","Redis","AWS","Docker","Kubernetes","Microservices","Distributed Systems",
+  "Algorithms","System Design","Data Structures","Design Patterns","A/B Testing","Agile","Scrum","Kafka","Message Queue",
+  "Machine Learning","Deep Learning","CI/CD","Git","REST API","GraphQL","Load Balancing","High Concurrency","Multithreading",
+  "Unit Testing","Linux","Nginx","DevOps","Performance Tuning","Cloud Native"];
+
+var COMPANIES = [
+  {name:"Google", need:["Algorithms","System Design"]},
+  {name:"Meta",   need:["React","A/B Testing"]},
+  {name:"Amazon", need:["AWS","Microservices"]}
+];
+
+var NEEDED_SKILLS = [];
+COMPANIES.forEach(function(c){ c.need.forEach(function(s){ if(NEEDED_SKILLS.indexOf(s)<0) NEEDED_SKILLS.push(s); }); });
+// spawn pool: full variety, with the skills companies ask for weighted up so a win stays reachable
+var SPAWN_POOL = SKILLS.concat(NEEDED_SKILLS, NEEDED_SKILLS);
+
+var ROUND_SECONDS = 15;
+
+var canvas = document.getElementById('game');
+var ctx = canvas.getContext('2d');
+var dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+var W = 0, H = 0;
+
+function resize(){
+  var rect = window.innerWidth, h = window.innerHeight;
+  W = rect; H = h;
+  canvas.width = Math.floor(W * dpr);
+  canvas.height = Math.floor(H * dpr);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  player.x = W/2; player.y = H - 64;
+}
+window.addEventListener('resize', resize);
+
+var startScreen = document.getElementById('startScreen');
+var endScreen = document.getElementById('endScreen');
+var hud = document.getElementById('hud');
+var throwBtn = document.getElementById('throwBtn');
+var timerEl = document.getElementById('timer');
+var skillsListEl = document.getElementById('skills-list');
+
+var player = {x:0, y:0, aim:-Math.PI/2};
+var ufos = [];
+var bullets = [];
+var particles = [];
+var stars = [];
+var hitSkills = new Set();
+var hitCount = 0;
+var phase = 'start'; // start | playing | end
+var timeLeft = ROUND_SECONDS;
+var spawnTimer = 0;
+var nextSpawnIn = 0.4;
+var lastT = 0;
+var throwCooldown = 0;
+
+function rand(a,b){ return a + Math.random()*(b-a); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+function initStars(){
+  stars = [];
+  var n = 140;
+  for(var i=0;i<n;i++){
+    stars.push({x:Math.random(), y:Math.random(), r:rand(0.4,1.6), tw:Math.random()*Math.PI*2});
+  }
+}
+
+function clampAim(mx,my){
+  var dx = mx - player.x;
+  var dy = Math.min(my - player.y, -40); // always treat target as above the hand
+  var a = Math.atan2(dy, dx);
+  var min = -Math.PI + 0.17, max = -0.17; // keep within upper hemisphere
+  if(a > max) a = max;
+  if(a < min) a = min;
+  return a;
+}
+
+function onPointerMove(e){
+  var p = e.touches ? e.touches[0] : e;
+  player.aim = clampAim(p.clientX, p.clientY);
+}
+canvas.addEventListener('mousemove', onPointerMove);
+canvas.addEventListener('touchmove', function(e){ onPointerMove(e); e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchstart', function(e){ onPointerMove(e); }, {passive:true});
+
+function spawnUfo(){
+  var speed = rand(85,165);
+  ufos.push({
+    x: W + 70,
+    y: rand(H*0.14, H*0.52),
+    speed: speed,
+    r: rand(26,34),
+    skill: pick(SPAWN_POOL),
+    bob: Math.random()*Math.PI*2,
+    wobbleAmp: rand(4,10)
+  });
+}
+
+function throwKeyboard(){
+  if(phase !== 'playing') return;
+  if(throwCooldown > 0) return;
+  throwCooldown = 0.16;
+  var speed = 760;
+  var hand = 34;
+  var a = player.aim;
+  bullets.push({
+    x: player.x + Math.cos(a)*hand,
+    y: player.y + Math.sin(a)*hand,
+    vx: Math.cos(a)*speed,
+    vy: Math.sin(a)*speed,
+    angle: a,
+    r: 13
+  });
+}
+
+window.addEventListener('keydown', function(e){
+  if(e.code === 'Space'){
+    e.preventDefault();
+    throwKeyboard();
+  }
+});
+throwBtn.addEventListener('click', throwKeyboard);
+
+function burst(x,y,color){
+  for(var i=0;i<16;i++){
+    var a = Math.random()*Math.PI*2;
+    var sp = rand(60,240);
+    particles.push({
+      x:x, y:y,
+      vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+      life: rand(0.35,0.7), t:0,
+      color: color
+    });
+  }
+}
+
+function resetGame(){
+  ufos = []; bullets = []; particles = [];
+  hitSkills = new Set();
+  hitCount = 0;
+  timeLeft = ROUND_SECONDS;
+  spawnTimer = 0;
+  nextSpawnIn = 0.3;
+  throwCooldown = 0;
+  renderSkillChips();
+  timerEl.textContent = ROUND_SECONDS;
+  timerEl.classList.remove('low');
+}
+
+function renderSkillChips(){
+  skillsListEl.innerHTML = '';
+  hitSkills.forEach(function(s){
+    var el = document.createElement('span');
+    el.className = 'tag';
+    el.textContent = s;
+    skillsListEl.appendChild(el);
+  });
+}
+
+function startGame(){
+  resetGame();
+  phase = 'playing';
+  startScreen.hidden = true;
+  endScreen.hidden = true;
+  hud.hidden = false;
+  throwBtn.hidden = false;
+}
+
+function endGame(){
+  phase = 'end';
+  hud.hidden = true;
+  throwBtn.hidden = true;
+
+  var matched = COMPANIES.filter(function(c){
+    return c.need.every(function(s){ return hitSkills.has(s); });
+  });
+
+  document.getElementById('end-stat').textContent =
+    'You shot down ' + hitCount + ' UFO' + (hitCount===1?'':'s') + ' and landed ' + hitSkills.size + ' skill' + (hitSkills.size===1?'':'s') + '.';
+
+  var allskills = document.getElementById('allskills');
+  allskills.innerHTML = '';
+  if(hitSkills.size){
+    hitSkills.forEach(function(s){
+      var el = document.createElement('span');
+      el.className = 'tag';
+      el.textContent = s;
+      allskills.appendChild(el);
+    });
+  }
+
+  var resultsEl = document.getElementById('results');
+  resultsEl.innerHTML = '';
+  var eyebrow = document.getElementById('end-eyebrow');
+  var title = document.getElementById('end-title');
+
+  if(matched.length){
+    eyebrow.textContent = 'Offers Landed';
+    title.textContent = 'You Got The Offer!';
+    matched.forEach(function(c){
+      var card = document.createElement('div');
+      card.className = 'offer-card';
+      card.innerHTML = '<span class="mark">🎉</span><span class="txt">You just landed the <b>' + c.name + '</b> offer!</span>';
+      resultsEl.appendChild(card);
+    });
+  } else {
+    eyebrow.textContent = "Time's Up";
+    title.textContent = 'Results';
+    var no = document.createElement('div');
+    no.className = 'no-offer';
+    no.textContent = "No offer this round — you didn't land a full skill combo. Aim sharper and hunt again!";
+    resultsEl.appendChild(no);
+  }
+
+  endScreen.hidden = false;
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+document.getElementById('menuBtn').addEventListener('click', function(){
+  phase = 'start';
+  endScreen.hidden = true;
+  startScreen.hidden = false;
+});
+
+function update(dt){
+  if(throwCooldown > 0) throwCooldown -= dt;
+
+  if(phase === 'playing'){
+    timeLeft -= dt;
+    if(timeLeft <= 0){
+      timeLeft = 0;
+      timerEl.textContent = '0';
+      endGame();
+    } else {
+      timerEl.textContent = Math.ceil(timeLeft);
+      timerEl.classList.toggle('low', timeLeft <= 5);
+    }
+
+    spawnTimer += dt;
+    if(spawnTimer >= nextSpawnIn && ufos.length < 6){
+      spawnTimer = 0;
+      nextSpawnIn = rand(0.55, 1.15);
+      spawnUfo();
+    }
+
+    for(var i = ufos.length-1; i>=0; i--){
+      var u = ufos[i];
+      u.x -= u.speed * dt;
+      u.bob += dt*2.2;
+      if(u.x < -90) ufos.splice(i,1);
+    }
+  }
+
+  for(var j = bullets.length-1; j>=0; j--){
+    var b = bullets[j];
+    b.x += b.vx*dt; b.y += b.vy*dt;
+    if(b.x < -40 || b.x > W+40 || b.y < -40 || b.y > H+40){
+      bullets.splice(j,1); continue;
+    }
+    for(var k = ufos.length-1; k>=0; k--){
+      var uu = ufos[k];
+      var dx = b.x-uu.x, dy = b.y-uu.y;
+      if(dx*dx+dy*dy < (uu.r+b.r)*(uu.r+b.r)){
+        hitSkills.add(uu.skill);
+        hitCount++;
+        burst(uu.x, uu.y, '#ff6ad5');
+        renderSkillChips();
+        ufos.splice(k,1);
+        bullets.splice(j,1);
+        break;
+      }
+    }
+  }
+
+  for(var p = particles.length-1; p>=0; p--){
+    var pt = particles[p];
+    pt.t += dt;
+    if(pt.t > pt.life){ particles.splice(p,1); continue; }
+    pt.x += pt.vx*dt; pt.y += pt.vy*dt;
+    pt.vx *= 0.94; pt.vy *= 0.94;
+  }
+}
+
+function drawBackground(t){
+  ctx.fillStyle = '#06070f';
+  ctx.fillRect(0,0,W,H);
+  var grd = ctx.createLinearGradient(0,0,0,H);
+  grd.addColorStop(0,'#0c1130');
+  grd.addColorStop(1,'#06070f');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0,0,W,H);
+  for(var i=0;i<stars.length;i++){
+    var s = stars[i];
+    var tw = 0.5 + 0.5*Math.sin(t*2 + s.tw);
+    ctx.globalAlpha = 0.3 + 0.7*tw;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(s.x*W, s.y*H, s.r, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawPlayer(){
+  var x = player.x, y = player.y;
+  ctx.save();
+  ctx.translate(x,y);
+  // body
+  ctx.fillStyle = '#1c2250';
+  ctx.strokeStyle = '#5eead4';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(0, -8, 16, 22, 0, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke();
+  // head
+  ctx.fillStyle = '#ffe3c4';
+  ctx.beginPath();
+  ctx.arc(0, -40, 13, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = '#1c2250';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // glasses
+  ctx.strokeStyle = '#06070f';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-9,-40); ctx.lineTo(9,-40);
+  ctx.stroke();
+  // arm toward aim
+  var a = player.aim;
+  var hx = Math.cos(a)*34, hy = Math.sin(a)*34;
+  ctx.strokeStyle = '#ffe3c4';
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0,-20);
+  ctx.lineTo(hx, hy-10);
+  ctx.stroke();
+  // keyboard in hand
+  ctx.save();
+  ctx.translate(hx, hy-10);
+  ctx.rotate(a + Math.PI/2);
+  drawKeyboardShape();
+  ctx.restore();
+
+  // aim guide
+  ctx.strokeStyle = '#5eead455';
+  ctx.setLineDash([5,7]);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(hx, hy-10);
+  ctx.lineTo(Math.cos(a)*(Math.max(W,H)), Math.sin(a)*(Math.max(W,H)));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.restore();
+}
+
+function drawKeyboardShape(){
+  ctx.fillStyle = '#2b3166';
+  ctx.strokeStyle = '#5eead4';
+  ctx.lineWidth = 1.5;
+  roundRect(-13,-8,26,16,3);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#5eead4aa';
+  for(var r=0;r<2;r++){
+    for(var c=0;c<5;c++){
+      ctx.fillRect(-10 + c*4.5, -5 + r*7, 3, 3);
+    }
+  }
+}
+
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function drawUfo(u){
+  var bobY = Math.sin(u.bob)*u.wobbleAmp;
+  var x = u.x, y = u.y + bobY;
+  ctx.save();
+  ctx.translate(x,y);
+
+  // glow
+  var g = ctx.createRadialGradient(0,0,2,0,0,u.r*1.8);
+  g.addColorStop(0,'#ff6ad555');
+  g.addColorStop(1,'#ff6ad500');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0,0,u.r*1.8,0,Math.PI*2);
+  ctx.fill();
+
+  // dome
+  ctx.fillStyle = '#9af2ff';
+  ctx.beginPath();
+  ctx.ellipse(0, -u.r*0.35, u.r*0.55, u.r*0.45, 0, Math.PI, 0);
+  ctx.fill();
+
+  // body
+  ctx.fillStyle = '#ff6ad5';
+  ctx.strokeStyle = '#ffffff33';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, u.r, u.r*0.42, 0, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke();
+
+  ctx.fillStyle = '#ffffffaa';
+  for(var i=-2;i<=2;i++){
+    ctx.beginPath();
+    ctx.arc(i*u.r*0.35, 0, 2.3, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // skill label chip, ahead of travel direction (to the left)
+  var label = u.skill;
+  ctx.font = '600 13px "JetBrains Mono", monospace';
+  var tw = ctx.measureText(label).width;
+  var padX = 10, chipH = 24;
+  var cx = x - u.r - 14 - tw/2 - padX*0.5;
+  var cy = y;
+  ctx.fillStyle = '#0d1026ee';
+  ctx.strokeStyle = '#5eead488';
+  ctx.lineWidth = 1.5;
+  roundRect(cx - tw/2 - padX, cy - chipH/2, tw + padX*2, chipH, chipH/2);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#5eead4';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, cx, cy+1);
+  ctx.textAlign = 'left';
+}
+
+function drawBullet(b){
+  ctx.save();
+  ctx.translate(b.x,b.y);
+  ctx.rotate(b.angle + Math.PI/2);
+  drawKeyboardShape();
+  ctx.restore();
+}
+
+function drawParticles(){
+  for(var i=0;i<particles.length;i++){
+    var p = particles[i];
+    var alpha = 1 - p.t/p.life;
+    ctx.globalAlpha = Math.max(alpha,0);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,3,0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function draw(t){
+  drawBackground(t);
+  drawParticles();
+  for(var i=0;i<ufos.length;i++) drawUfo(ufos[i]);
+  for(var j=0;j<bullets.length;j++) drawBullet(bullets[j]);
+  if(phase !== 'end') drawPlayer();
+}
+
+function loop(ts){
+  if(!lastT) lastT = ts;
+  var dt = Math.min(0.033, (ts-lastT)/1000);
+  lastT = ts;
+  update(dt);
+  draw(ts/1000);
+  requestAnimationFrame(loop);
+}
+
+initStars();
+resize();
+requestAnimationFrame(loop);
+})();
+</script>
