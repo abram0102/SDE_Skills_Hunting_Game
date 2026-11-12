@@ -243,10 +243,21 @@ var SKILLS = ["Python","Java","C++","Go","TypeScript","JavaScript","React","Vue"
   "Unit Testing","Linux","Nginx","DevOps","Performance Tuning","Cloud Native"];
 
 var COMPANIES = [
-  {name:"Google", need:["Algorithms","System Design"]},
-  {name:"Meta",   need:["React","A/B Testing"]},
-  {name:"Amazon", need:["AWS","Microservices"]}
+  {name:"Google",     need:["Algorithms","System Design"]},
+  {name:"Meta",       need:["React","A/B Testing"]},
+  {name:"Amazon",     need:["AWS","Microservices"]},
+  {name:"Microsoft",  need:["SQL","Agile"]},
+  {name:"Netflix",    need:["Microservices","Kubernetes"]},
+  {name:"OpenAI",     need:["Machine Learning","Python"]},
+  {name:"Apple",      need:["C++","Design Patterns"]},
+  {name:"Uber",       need:["Distributed Systems","High Concurrency"]},
+  {name:"Airbnb",     need:["React","Node.js"]},
+  {name:"LinkedIn",   need:["Kafka","Scrum"]},
+  {name:"Stripe",     need:["REST API","Unit Testing"]},
+  {name:"Salesforce", need:["CI/CD","DevOps"]}
 ];
+
+var MAX_OFFERS_SHOWN = 3;
 
 var NEEDED_SKILLS = [];
 COMPANIES.forEach(function(c){ c.need.forEach(function(s){ if(NEEDED_SKILLS.indexOf(s)<0) NEEDED_SKILLS.push(s); }); });
@@ -323,10 +334,13 @@ canvas.addEventListener('touchmove', function(e){ onPointerMove(e); e.preventDef
 canvas.addEventListener('touchstart', function(e){ onPointerMove(e); }, {passive:true});
 
 function spawnUfo(){
+  var fromRight = Math.random() < 0.5;
+  var dir = fromRight ? -1 : 1;
   var speed = rand(85,165);
   ufos.push({
-    x: W + 70,
+    x: fromRight ? W + 70 : -70,
     y: rand(H*0.14, H*0.52),
+    dir: dir,
     speed: speed,
     r: rand(26,34),
     skill: pick(SPAWN_POOL),
@@ -413,6 +427,9 @@ function endGame(){
   var matched = COMPANIES.filter(function(c){
     return c.need.every(function(s){ return hitSkills.has(s); });
   });
+  if(matched.length > MAX_OFFERS_SHOWN){
+    matched = matched.slice().sort(function(){ return Math.random()-0.5; }).slice(0, MAX_OFFERS_SHOWN);
+  }
 
   document.getElementById('end-stat').textContent =
     'You shot down ' + hitCount + ' UFO' + (hitCount===1?'':'s') + ' and landed ' + hitSkills.size + ' skill' + (hitSkills.size===1?'':'s') + '.';
@@ -477,17 +494,17 @@ function update(dt){
     }
 
     spawnTimer += dt;
-    if(spawnTimer >= nextSpawnIn && ufos.length < 6){
+    if(spawnTimer >= nextSpawnIn && ufos.length < 11){
       spawnTimer = 0;
-      nextSpawnIn = rand(0.55, 1.15);
+      nextSpawnIn = rand(0.3, 0.7);
       spawnUfo();
     }
 
     for(var i = ufos.length-1; i>=0; i--){
       var u = ufos[i];
-      u.x -= u.speed * dt;
+      u.x += u.dir * u.speed * dt;
       u.bob += dt*2.2;
-      if(u.x < -90) ufos.splice(i,1);
+      if(u.x < -90 || u.x > W+90) ufos.splice(i,1);
     }
   }
 
@@ -657,12 +674,12 @@ function drawUfo(u){
   }
   ctx.restore();
 
-  // skill label chip, ahead of travel direction (to the left)
+  // skill label chip, ahead of travel direction
   var label = u.skill;
   ctx.font = '600 13px "JetBrains Mono", monospace';
   var tw = ctx.measureText(label).width;
   var padX = 10, chipH = 24;
-  var cx = x - u.r - 14 - tw/2 - padX*0.5;
+  var cx = x + u.dir * (u.r + 14 + tw/2 + padX*0.5);
   var cy = y;
   ctx.fillStyle = '#0d1026ee';
   ctx.strokeStyle = '#5eead488';
