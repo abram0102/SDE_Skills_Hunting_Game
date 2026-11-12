@@ -1,6 +1,6 @@
 # Offer Hunting
 
-A 15-second arcade game: UFOs fly in from both sides carrying SDE skills (Python, AWS, System Design, ...). Aim with your mouse/trackpad, press **Space** to throw a keyboard, and shoot down UFOs to collect skills. Land the right combo before time's up and you get the offer.
+A 20-second arcade game: UFOs fly in from both sides carrying SDE skills (Python, AWS, System Design, ...). Aim with your mouse/trackpad, press **Space** to throw a keyboard, and shoot down UFOs to collect skills and chain combos. Land the right combo before time's up and you get the offer.
 
 **Play it here: [abram0102.github.io/SDE_Skills_Hunting_Game](https://abram0102.github.io/SDE_Skills_Hunting_Game/)**
 
@@ -8,7 +8,7 @@ A 15-second arcade game: UFOs fly in from both sides carrying SDE skills (Python
 
 - **Mouse / Trackpad** — aim your throw
 - **Space** — throw the keyboard
-- **15 seconds** — one round
+- **20 seconds** — one round
 
 ## Tech
 

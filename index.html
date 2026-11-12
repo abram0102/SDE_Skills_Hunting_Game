@@ -211,7 +211,7 @@ button.ghost{
 <canvas id="game"></canvas>
 
 <div id="hud" hidden>
-  <div class="hud-chip safe-x" id="timer-chip"><div id="timer">15</div></div>
+  <div class="hud-chip safe-x" id="timer-chip"><div id="timer">20</div></div>
   <div class="hud-chip safe-x" id="score-chip">
     <div id="score">0</div>
     <div id="combo" hidden>Combo ×1</div>
@@ -228,11 +228,11 @@ button.ghost{
   <div class="card safe-x">
     <p class="eyebrow">SDE Interview Survival Game</p>
     <h1>Offer Hunting</h1>
-    <p class="sub">UFOs are flying in, each one carrying a skill big tech wants. You've got 15 seconds — aim, throw your keyboard, and shoot down as many as you can. Land the right combo and an offer is yours.</p>
+    <p class="sub">UFOs are flying in, each one carrying a skill big tech wants. You've got 20 seconds — aim, throw your keyboard, and shoot down as many as you can. Land the right combo and an offer is yours.</p>
     <div class="howto">
       <div><kbd>Mouse / Trackpad</kbd><span>Move to aim your throw</span></div>
       <div><kbd>Space</kbd><span>Throw the keyboard, shoot down the UFO ahead</span></div>
-      <div><kbd>15s</kbd><span>That's the whole round — move fast</span></div>
+      <div><kbd>20s</kbd><span>That's the whole round — move fast</span></div>
     </div>
     <button class="primary" id="startBtn">Start Hunting</button>
   </div>
@@ -282,7 +282,8 @@ COMPANIES.forEach(function(c){ c.need.forEach(function(s){ if(NEEDED_SKILLS.inde
 // spawn pool: full variety, with the skills companies ask for weighted up so a win stays reachable
 var SPAWN_POOL = SKILLS.concat(NEEDED_SKILLS, NEEDED_SKILLS);
 
-var ROUND_SECONDS = 15;
+var ROUND_SECONDS = 20;
+var COMBO_TIMEOUT = 1.6; // seconds without a hit before the combo drops
 
 var canvas = document.getElementById('game');
 var ctx = canvas.getContext('2d');
@@ -314,12 +315,14 @@ var player = {x:0, y:0, aim:-Math.PI/2};
 var ufos = [];
 var bullets = [];
 var particles = [];
+var popups = [];
 var stars = [];
 var hitSkills = new Set();
 var hitCount = 0;
 var score = 0;
 var combo = 0;
 var maxCombo = 0;
+var comboIdleTime = 0;
 var phase = 'start'; // start | playing | end
 var timeLeft = ROUND_SECONDS;
 var spawnTimer = 0;
@@ -461,26 +464,14 @@ window.addEventListener('keydown', function(e){
 });
 throwBtn.addEventListener('click', throwKeyboard);
 
-function burst(x,y,color){
-  for(var i=0;i<16;i++){
-    var a = Math.random()*Math.PI*2;
-    var sp = rand(60,240);
-    particles.push({
-      x:x, y:y,
-      vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
-      life: rand(0.35,0.7), t:0,
-      color: color
-    });
-  }
-}
-
 function resetGame(){
-  ufos = []; bullets = []; particles = [];
+  ufos = []; bullets = []; particles = []; popups = [];
   hitSkills = new Set();
   hitCount = 0;
   score = 0;
   combo = 0;
   maxCombo = 0;
+  comboIdleTime = 0;
   timeLeft = ROUND_SECONDS;
   spawnTimer = 0;
   nextSpawnIn = 0.3;
@@ -519,10 +510,13 @@ function updateScoreUI(pop){
 
 function registerHit(){
   combo++;
+  comboIdleTime = 0;
   if(combo > maxCombo) maxCombo = combo;
   var multiplier = 1 + Math.floor((combo-1)/3)*0.5;
-  score += Math.round(10 * multiplier);
+  var points = Math.round(10 * multiplier);
+  score += points;
   updateScoreUI(true);
+  return points;
 }
 
 function breakCombo(){
@@ -530,6 +524,25 @@ function breakCombo(){
     combo = 0;
     updateScoreUI(false);
   }
+}
+
+function spawnPopup(x, y, text, color){
+  popups.push({x:x, y:y, text:text, color:color, life:0.8, t:0});
+}
+
+function spawnExplosion(x, y){
+  for(var i=0;i<22;i++){
+    var a = Math.random()*Math.PI*2;
+    var sp = rand(70,280);
+    particles.push({
+      kind:'spark',
+      x:x, y:y,
+      vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+      life: rand(0.3,0.65), t:0,
+      color: Math.random() < 0.5 ? '#ff6ad5' : '#ffe08a'
+    });
+  }
+  particles.push({kind:'ring', x:x, y:y, life:0.4, t:0, maxR:48});
 }
 
 function startGame(){
@@ -630,6 +643,11 @@ function update(dt){
       spawnUfo(diff.speedMin, diff.speedMax);
     }
 
+    if(combo > 0){
+      comboIdleTime += dt;
+      if(comboIdleTime > COMBO_TIMEOUT) breakCombo();
+    }
+
     for(var i = ufos.length-1; i>=0; i--){
       var u = ufos[i];
       u.x += u.dir * u.speed * dt;
@@ -643,7 +661,6 @@ function update(dt){
     b.x += b.vx*dt; b.y += b.vy*dt;
     if(b.x < -40 || b.x > W+40 || b.y < -40 || b.y > H+40){
       bullets.splice(j,1);
-      if(phase === 'playing') breakCombo();
       continue;
     }
     for(var k = ufos.length-1; k>=0; k--){
@@ -652,8 +669,9 @@ function update(dt){
       if(dx*dx+dy*dy < (uu.r+b.r)*(uu.r+b.r)){
         hitSkills.add(uu.skill);
         hitCount++;
-        registerHit();
-        burst(uu.x, uu.y, '#ff6ad5');
+        var points = registerHit();
+        spawnExplosion(uu.x, uu.y);
+        spawnPopup(uu.x, uu.y - uu.r - 8, combo >= 2 ? ('COMBO ×' + combo) : ('+' + points), combo >= 2 ? '#ff6ad5' : '#5eead4');
         playHit();
         renderSkillChips();
         ufos.splice(k,1);
@@ -667,8 +685,16 @@ function update(dt){
     var pt = particles[p];
     pt.t += dt;
     if(pt.t > pt.life){ particles.splice(p,1); continue; }
+    if(pt.kind === 'ring') continue;
     pt.x += pt.vx*dt; pt.y += pt.vy*dt;
     pt.vx *= 0.94; pt.vy *= 0.94;
+  }
+
+  for(var q = popups.length-1; q>=0; q--){
+    var pu = popups[q];
+    pu.t += dt;
+    if(pu.t > pu.life){ popups.splice(q,1); continue; }
+    pu.y -= 42*dt;
   }
 }
 
@@ -838,8 +864,17 @@ function drawBullet(b){
 function drawParticles(){
   for(var i=0;i<particles.length;i++){
     var p = particles[i];
-    var alpha = 1 - p.t/p.life;
-    ctx.globalAlpha = Math.max(alpha,0);
+    var k = p.t/p.life;
+    if(p.kind === 'ring'){
+      ctx.globalAlpha = Math.max(1-k, 0) * 0.8;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3*(1-k) + 1;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.maxR*k, 0, Math.PI*2);
+      ctx.stroke();
+      continue;
+    }
+    ctx.globalAlpha = Math.max(1-k, 0);
     ctx.fillStyle = p.color;
     ctx.beginPath();
     ctx.arc(p.x,p.y,3,0,Math.PI*2);
@@ -848,11 +883,26 @@ function drawParticles(){
   ctx.globalAlpha = 1;
 }
 
+function drawPopups(){
+  ctx.font = '700 16px "Space Grotesk", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for(var i=0;i<popups.length;i++){
+    var p = popups[i];
+    ctx.globalAlpha = Math.max(1 - p.t/p.life, 0);
+    ctx.fillStyle = p.color;
+    ctx.fillText(p.text, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+}
+
 function draw(t){
   drawBackground(t);
   drawParticles();
   for(var i=0;i<ufos.length;i++) drawUfo(ufos[i]);
   for(var j=0;j<bullets.length;j++) drawBullet(bullets[j]);
+  drawPopups();
   if(phase !== 'end') drawPlayer();
 }
 
